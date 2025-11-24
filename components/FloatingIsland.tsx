@@ -13,7 +13,12 @@ interface FloatingIslandProps {
     onToggleCollapse?: () => void;
 }
 
-export default function FloatingIsland({ onSearch, isSearching, isCollapsed = false, onToggleCollapse }: FloatingIslandProps) {
+export default function FloatingIsland({
+    onSearch,
+    isSearching,
+    isCollapsed = false,
+    onToggleCollapse
+}: FloatingIslandProps) {
     const { t } = useLanguage();
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
@@ -118,8 +123,13 @@ export default function FloatingIsland({ onSearch, isSearching, isCollapsed = fa
 
                 {/* Vibe Slider */}
                 <div className="space-y-3">
-                    <div className="flex justify-between text-xs font-medium tracking-wider text-white/50 uppercase">
+                    <div className="flex justify-between items-center text-xs font-medium tracking-wider text-white/50 uppercase">
                         <span className="text-cyan-400">Efficiency</span>
+                        {/* Display the 0-10 value */}
+                        <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/20 shadow-lg">
+                            <span className="text-white font-bold text-base">{Math.round(vibe / 10)}</span>
+                            <span className="text-white/50 text-xs">/10</span>
+                        </div>
                         <span className="text-pink-400">Serendipity</span>
                     </div>
                     <div className="relative h-6 flex items-center group/slider">

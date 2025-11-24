@@ -45,13 +45,13 @@ export default function WaypointPopup({ waypoint, onClose, onNext, onPrev, hasNe
     const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
     const [isLoadingPhotos, setIsLoadingPhotos] = useState(true);
     const [photoError, setPhotoError] = useState(false);
-    
-    if (!waypoint) return null;
 
     // Fetch real photos from Google Places API
     useEffect(() => {
+        if (!waypoint) return;
+
         async function fetchPhotos() {
-            if (!waypoint.coordinates) {
+            if (!waypoint?.coordinates) {
                 setIsLoadingPhotos(false);
                 setPhotoError(true);
                 return;
@@ -90,7 +90,9 @@ export default function WaypointPopup({ waypoint, onClose, onNext, onPrev, hasNe
         }
 
         fetchPhotos();
-    }, [waypoint.name, waypoint.coordinates]);
+    }, [waypoint?.name, waypoint?.coordinates]);
+
+    if (!waypoint) return null;
 
     const handleNextPhoto = () => {
         setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
@@ -211,11 +213,10 @@ export default function WaypointPopup({ waypoint, onClose, onNext, onPrev, hasNe
                                 <button
                                     key={index}
                                     onClick={() => setCurrentPhotoIndex(index)}
-                                    className={`w-2 h-2 rounded-full transition-all ${
-                                        index === currentPhotoIndex
+                                    className={`w-2 h-2 rounded-full transition-all ${index === currentPhotoIndex
                                             ? 'bg-white w-6'
                                             : 'bg-white/40 hover:bg-white/60'
-                                    }`}
+                                        }`}
                                     aria-label={`Go to photo ${index + 1}`}
                                 />
                             ))}
@@ -263,7 +264,7 @@ export default function WaypointPopup({ waypoint, onClose, onNext, onPrev, hasNe
                                 <span>{t('popup.nearbyPlaces') || 'Nearby Places'}</span>
                                 <span className="text-white/40 text-[10px] font-normal">({t('popup.within3km') || 'within 3km'})</span>
                             </h4>
-                            
+
                             {isLoadingNearby ? (
                                 <div className="text-center py-4">
                                     <div className="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto" />

@@ -1,12 +1,21 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import MapBackground from '@/components/MapBackground';
 import FloatingIsland from '@/components/FloatingIsland';
-import WaypointPopup from '@/components/WaypointPopup';
-import LanguageToggle from '@/components/LanguageToggle';
+import WelcomeOverlay from '@/components/WelcomeOverlay'; // New import
+import AuthModal from '@/components/AuthModal'; // New import
+import HistoryButton from '@/components/HistoryButton'; // New import
+import TripJournal from '@/components/TripJournal'; // New import
+import UserMenu from '@/components/UserMenu'; // New import
+import WaypointPopup from '@/components/WaypointPopup'; // Still needed
+import LanguageToggle from '@/components/LanguageToggle'; // Still needed
 import { useLanguage } from '@/contexts/LanguageContext';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const LOADING_TEXTS_EN = [
   "Scanning local blogs...",
@@ -30,22 +39,26 @@ export default function Home() {
   const { language, t } = useLanguage();
   const [isSearching, setIsSearching] = useState(false);
   const [loadingText, setLoadingText] = useState('');
-  const [tripPlan, setTripPlan] = useState<any>(null);
+  const [waypoints, setWaypoints] = useState<any[]>([]); // New state
+  const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null); // New state
   const [selectedWaypoint, setSelectedWaypoint] = useState<any>(null);
-  const [showHero, setShowHero] = useState(true);
   const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
   const [isLoadingNearby, setIsLoadingNearby] = useState(false);
   const [isNearbyPlace, setIsNearbyPlace] = useState(false);
-  const [isIslandCollapsed, setIsIslandCollapsed] = useState(false);
+
+  const [parentWaypoint, setParentWaypoint] = useState<any>(null); // Track the parent waypoint when viewing nearby places
+  const [nearbyCache, setNearbyCache] = useState<Map<string, any[]>>(new Map()); // Cache nearby places by waypoint coordinates
+
+  // Auth & History State
+  const [user, setUser] = useState<any>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const [itineraryContent, setItineraryContent] = useState('');
+  const [currentTripTitle, setCurrentTripTitle] = useState('');
 
   const LOADING_TEXTS = language === 'zh' ? LOADING_TEXTS_ZH : LOADING_TEXTS_EN;
 
-  // Collapse island when trip is planned
-  useEffect(() => {
-    if (tripPlan) {
-      setIsIslandCollapsed(true);
-    }
-  }, [tripPlan]);
+
 
   // Cycle through loading texts
   useEffect(() => {
@@ -61,17 +74,67 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isSearching, LOADING_TEXTS]);
 
-  // Hide hero when trip is planned
+
+
+  // Auth & History Effect
   useEffect(() => {
-    if (tripPlan) {
-      setShowHero(false);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleSaveTrip = async (tripData: any, start: string, end: string, vibe: number, days: number, itinerary: string) => {
+    if (!user) return;
+
+    try {
+      // Convert nested arrays to JSON strings for Firestore compatibility
+      await addDoc(collection(db, 'trips'), {
+        userId: user.uid,
+        start_location: start,
+        end_location: end,
+        vibe: vibe,
+        days: days,
+        waypoints: JSON.stringify(tripData.waypoints), // Serialize to avoid nested array error
+        route_geojson: JSON.stringify(tripData.route), // Serialize to avoid nested array error
+        itinerary_content: itinerary,
+        title: `${start} to ${end}`,
+        createdAt: serverTimestamp()
+      });
+      console.log('Trip saved successfully!');
+    } catch (error) {
+      console.error('Error saving trip:', error);
     }
-  }, [tripPlan]);
+  };
+
+  const handleRestoreTrip = (trip: any) => {
+    // Reset state
+    setSelectedWaypoint(null);
+    setNearbyPlaces([]);
+    setIsNearbyPlace(false);
+    setParentWaypoint(null);
+
+    // Load trip data (parse JSON strings back to objects)
+    setWaypoints(JSON.parse(trip.waypoints) || []);
+    setRouteGeoJSON(JSON.parse(trip.route_geojson));
+    setItineraryContent(trip.itinerary_content || '');
+    setCurrentTripTitle(`${trip.start_location} to ${trip.end_location}`);
+
+    // Show journal if content exists
+    if (trip.itinerary_content) {
+      setIsJournalOpen(true);
+    }
+  };
 
   const handleSearch = async (start: string, end: string, vibe: number, days: number) => {
     setIsSearching(true);
-    setTripPlan(null);
+    // Reset previous state
+    setWaypoints([]);
+    setRouteGeoJSON(null);
     setSelectedWaypoint(null);
+    setNearbyPlaces([]);
+    setItineraryContent('');
+    setCurrentTripTitle(`${start} to ${end}`);
 
     const startTime = Date.now();
     console.log(`🚀 Planning trip: ${start} → ${end}`);
@@ -85,16 +148,32 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ API Error Response:', errorData);
         throw new Error(errorData.error || 'Failed to plan trip');
       }
 
       const data = await response.json();
       const duration = Date.now() - startTime;
       console.log(`✅ Trip planned in ${duration}ms:`, data.waypoints?.length || 0, 'waypoints');
-      setTripPlan(data);
-    } catch (error) {
-      console.error('Trip planning error:', error);
-      alert(t('errors.planningFailed') || 'Failed to plan trip. Please check your API keys and try again.');
+      console.log('📦 Full response data:', data);
+
+      setWaypoints(data.waypoints);
+      setRouteGeoJSON(data.route);
+
+      if (data.itinerary) {
+        setItineraryContent(data.itinerary);
+        setIsJournalOpen(true);
+      }
+
+      // Save to history if logged in
+      if (user) {
+        handleSaveTrip(data, start, end, vibe, days, data.itinerary);
+      }
+
+    } catch (error: any) {
+      console.error('❌ Trip planning error:', error);
+      console.error('Error message:', error.message);
+      alert(error.message || t('errors.planningFailed') || 'Failed to plan trip. Please check your API keys and try again.');
     } finally {
       setIsSearching(false);
     }
@@ -102,17 +181,34 @@ export default function Home() {
 
   const handleWaypointClick = async (waypoint: any, isNearby = false) => {
     console.log(`👆 Clicked waypoint: ${waypoint.name}, isNearby: ${isNearby}`);
+
+    // If clicking a nearby place, save the current waypoint as parent
+    if (isNearby && selectedWaypoint && !isNearbyPlace) {
+      setParentWaypoint(selectedWaypoint);
+    }
+
     setSelectedWaypoint(waypoint);
     setIsNearbyPlace(isNearby);
-    
+
     // Only fetch nearby places for main waypoints, not for nearby places themselves
     if (!isNearby) {
+      // Generate cache key from waypoint coordinates
+      const cacheKey = `${waypoint.coordinates[0]},${waypoint.coordinates[1]}`;
+
+      // Check cache first
+      if (nearbyCache.has(cacheKey)) {
+        console.log(`💾 Using cached nearby places for: ${waypoint.name}`);
+        setNearbyPlaces(nearbyCache.get(cacheKey) || []);
+        return; // Skip API call
+      }
+
+      // Fetch from API if not cached
       setIsLoadingNearby(true);
       setNearbyPlaces([]); // Clear old nearby places first
-      
+
       const startTime = Date.now();
       console.log(`🔍 Fetching nearby places for: ${waypoint.name} at [${waypoint.coordinates}]`);
-      
+
       try {
         const response = await fetch('/api/nearby', {
           method: 'POST',
@@ -123,7 +219,7 @@ export default function Home() {
             language
           })
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           const duration = Date.now() - startTime;
@@ -131,7 +227,12 @@ export default function Home() {
           if (data.nearby_places && data.nearby_places.length > 0) {
             console.log('📍 Nearby places coordinates:', data.nearby_places.map((p: any) => `${p.name}: [${p.coordinates}]`).join(', '));
           }
-          setNearbyPlaces(data.nearby_places || []);
+          const places = data.nearby_places || [];
+          setNearbyPlaces(places);
+
+          // Store in cache
+          setNearbyCache(prev => new Map(prev).set(cacheKey, places));
+          console.log(`💾 Cached ${places.length} nearby places for: ${waypoint.name}`);
         } else {
           console.error('❌ Failed to fetch nearby places:', response.status);
           setNearbyPlaces([]);
@@ -149,35 +250,34 @@ export default function Home() {
   };
 
   const handleNextWaypoint = () => {
-    if (!tripPlan || !selectedWaypoint) return;
-    const index = tripPlan.waypoints.indexOf(selectedWaypoint);
-    if (index < tripPlan.waypoints.length - 1) {
+    if (!waypoints || !selectedWaypoint) return;
+    const index = waypoints.indexOf(selectedWaypoint);
+    if (index < waypoints.length - 1) {
       // Clear nearby places immediately when navigating
       setNearbyPlaces([]);
-      handleWaypointClick(tripPlan.waypoints[index + 1], false);
+      handleWaypointClick(waypoints[index + 1], false);
     }
   };
 
   const handlePrevWaypoint = () => {
-    if (!tripPlan || !selectedWaypoint) return;
-    const index = tripPlan.waypoints.indexOf(selectedWaypoint);
+    if (!waypoints || !selectedWaypoint) return;
+    const index = waypoints.indexOf(selectedWaypoint);
     if (index > 0) {
       // Clear nearby places immediately when navigating
       setNearbyPlaces([]);
-      handleWaypointClick(tripPlan.waypoints[index - 1], false);
+      handleWaypointClick(waypoints[index - 1], false);
     }
   };
 
   return (
     <main className="relative w-full h-screen overflow-hidden bg-[#0F1115] text-white font-sans">
       <MapBackground
-        routeGeoJSON={tripPlan?.route}
-        waypoints={tripPlan?.waypoints}
-        startLocation={tripPlan?.start}
-        endLocation={tripPlan?.end}
+        routeGeoJSON={routeGeoJSON}
+        waypoints={waypoints}
+        startLocation={waypoints[0]} // Assuming first waypoint is start
+        endLocation={waypoints[waypoints.length - 1]} // Assuming last waypoint is end
         onWaypointClick={(wp) => handleWaypointClick(wp, false)}
         selectedWaypoint={selectedWaypoint}
-        extraWaypoints={tripPlan?.extraSuggestions}
         nearbyPlaces={nearbyPlaces}
         onNearbyClick={(place) => handleWaypointClick(place, true)}
       />
@@ -185,56 +285,7 @@ export default function Home() {
       {/* Language Toggle */}
       <LanguageToggle />
 
-      {/* Hero Section */}
-      <AnimatePresence>
-        {showHero && !tripPlan && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8 }}
-            className="absolute inset-0 z-5 flex items-center justify-center pointer-events-none"
-          >
-            <div className="text-center space-y-6 px-4">
-              {/* Background glow for better visibility */}
-              <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-              
-              <motion.div
-                initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.8 }}
-                className="relative"
-              >
-                <h1 className="text-7xl md:text-8xl font-bold tracking-tighter bg-gradient-to-r from-cyan-400 via-pink-400 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(6,182,212,0.5)]">
-                  {t('hero.title')}
-                </h1>
-              </motion.div>
-
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4, duration: 0.8 }}
-                className="relative"
-              >
-                <p className="text-xl md:text-2xl font-light tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] bg-black/20 backdrop-blur-sm px-6 py-2 rounded-full inline-block">
-                  {t('hero.subtitle')}
-                </p>
-              </motion.div>
-
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.6, duration: 0.8 }}
-                className="relative"
-              >
-                <p className="text-sm md:text-base font-light tracking-wider text-white/90 italic drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] bg-black/20 backdrop-blur-sm px-4 py-1 rounded-full inline-block">
-                  {t('hero.tagline')}
-                </p>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Hero Section - Replaced by WelcomeOverlay */}
 
       {/* Overlay for AI Reasoning Text */}
       <AnimatePresence>
@@ -257,29 +308,78 @@ export default function Home() {
 
       {/* Main Interface */}
       <AnimatePresence mode="wait">
-        {!selectedWaypoint && (
-          <FloatingIsland 
-            key="island" 
-            onSearch={handleSearch} 
-            isSearching={isSearching}
-            isCollapsed={isIslandCollapsed}
-            onToggleCollapse={() => setIsIslandCollapsed(!isIslandCollapsed)}
-          />
+        {!selectedWaypoint && waypoints.length === 0 && (
+          <WelcomeOverlay key="welcome" />
         )}
+
+        <AuthModal
+          key="auth-modal"
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+        />
+
+        <HistoryButton
+          key="history-btn"
+          user={user}
+          onRestoreTrip={handleRestoreTrip}
+        />
+
+        <TripJournal
+          key="trip-journal"
+          isOpen={isJournalOpen}
+          onClose={() => setIsJournalOpen(false)}
+          content={itineraryContent}
+          title={currentTripTitle}
+        />
+
+        <UserMenu
+          user={user}
+          onAuthClick={() => setIsAuthOpen(true)}
+          onLogout={() => auth.signOut()}
+        />
+
+        <FloatingIsland
+          key="floating-island"
+          onSearch={handleSearch}
+          isSearching={isSearching}
+          isCollapsed={!!selectedWaypoint} // Collapsed if a waypoint is selected
+          onToggleCollapse={() => setSelectedWaypoint(null)} // Uncollapse means closing waypoint popup
+        />
 
         {selectedWaypoint && (
           <WaypointPopup
             key="popup"
             waypoint={selectedWaypoint}
             onClose={() => {
-              setSelectedWaypoint(null);
-              setNearbyPlaces([]);
-              setIsNearbyPlace(false);
+              // If viewing a nearby place, restore the parent waypoint
+              if (isNearbyPlace && parentWaypoint) {
+                console.log(`🔙 Closing nearby place, restoring parent waypoint: ${parentWaypoint.name}`);
+                const cacheKey = `${parentWaypoint.coordinates[0]},${parentWaypoint.coordinates[1]}`;
+
+                setSelectedWaypoint(parentWaypoint);
+                setIsNearbyPlace(false);
+                setParentWaypoint(null);
+
+                // Restore from cache instead of re-fetching
+                if (nearbyCache.has(cacheKey)) {
+                  console.log(`💾 Restoring cached nearby places for: ${parentWaypoint.name}`);
+                  setNearbyPlaces(nearbyCache.get(cacheKey) || []);
+                } else {
+                  // Fallback: fetch if somehow not cached
+                  handleWaypointClick(parentWaypoint, false);
+                }
+              } else {
+                // Otherwise, close the popup completely
+                setSelectedWaypoint(null);
+                setNearbyPlaces([]);
+                setIsNearbyPlace(false);
+                setParentWaypoint(null);
+              }
             }}
             onNext={!isNearbyPlace ? handleNextWaypoint : undefined}
             onPrev={!isNearbyPlace ? handlePrevWaypoint : undefined}
-            hasPrev={!isNearbyPlace && !!tripPlan && tripPlan.waypoints.indexOf(selectedWaypoint) > 0}
-            hasNext={!isNearbyPlace && !!tripPlan && tripPlan.waypoints.indexOf(selectedWaypoint) < tripPlan.waypoints.length - 1}
+            hasPrev={!isNearbyPlace && !!waypoints && waypoints.indexOf(selectedWaypoint) > 0}
+            hasNext={!isNearbyPlace && !!waypoints && waypoints.indexOf(selectedWaypoint) < waypoints.length - 1}
             nearbyPlaces={!isNearbyPlace ? nearbyPlaces : []}
             isLoadingNearby={isLoadingNearby}
             onNearbyClick={(place) => handleWaypointClick(place, true)}

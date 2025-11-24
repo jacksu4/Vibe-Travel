@@ -12,6 +12,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing start or end location' }, { status: 400 });
         }
 
+        // Convert 0-100 vibe to 0-10 serendipity level
+        const serendipityLevel = Math.round(vibe / 10);
+        console.log(`\n🎯 Planning trip with serendipity level: ${serendipityLevel}/10 (vibe: ${vibe}/100)`);
+
         const isChineseMode = language === 'zh';
 
         // 1. Geocode Start and End
@@ -23,11 +27,11 @@ export async function POST(request: Request) {
         }
 
         // 2. Ask Gemini for Waypoints - using Gemini 2.5 Flash
-        const model = genAI.getGenerativeModel({ 
+        const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash'
         });
 
-        const languageInstruction = isChineseMode 
+        const languageInstruction = isChineseMode
             ? `请用中文回答。所有名称、描述、原因都必须使用简体中文。`
             : `Please respond in English. All names, descriptions, and reasons should be in English.`;
 
@@ -37,34 +41,71 @@ export async function POST(request: Request) {
       Plan a ${days || 1}-day road trip from "${start}" to "${end}".
       Start coordinates: [${startCoords[0]}, ${startCoords[1]}]
       End coordinates: [${endCoords[0]}, ${endCoords[1]}]
-      The user wants a "Vibe" score of ${vibe}/100 (0=Efficiency, 100=Serendipity).
+      
+      🎯 SERENDIPITY LEVEL: ${serendipityLevel}/10
+      (0 = Maximum Efficiency, 10 = Maximum Serendipity)
       
       CRITICAL GEOGRAPHIC RULES:
       1. ALL waypoints MUST be located between the start and end points
       2. Waypoints should follow a logical geographic progression from start to end
       3. DO NOT suggest places that require significant backtracking or detours in the wrong direction
-      4. For example: If traveling from Kagoshima to Fukuoka (both in Kyushu), ALL stops must be in Kyushu or along the direct route
-      5. NEVER suggest places that are hundreds of kilometers away from the direct route
+      4. NEVER suggest places that are hundreds of kilometers away from the direct route
       
-      STRICT VIBE LOGIC:
-      - If Vibe < 30 (Efficiency): Suggest ONLY practical stops (gas, quick food, rest areas) directly on the highway. Max 1-2 stops.
-      - If Vibe 30-70 (Balanced): Suggest famous landmarks or highly-rated restaurants near the route.
-      - If Vibe > 70 (Serendipity): Suggest "Hidden Gems" (unique local spots, scenic viewpoints, quirky shops) that might require a small detour (max 30km from direct route).
+      WAYPOINT GENERATION RULES BASED ON SERENDIPITY LEVEL:
       
-      Suggest a logical driving route with stops ordered geographically from start to end.
-
+      📍 Level 0-2 (Efficiency Focus):
+      - Suggest 0-1 stops maximum
+      - ONLY practical stops: gas stations, highway rest areas, fast food chains
+      - All stops must be directly on the main highway (no detours)
+      - Prioritize speed and directness
+      
+      📍 Level 3-4 (Slight Exploration):
+      - Suggest 1-2 stops
+      - Famous landmarks or popular restaurants within 5km of the route
+      - Quick photo opportunities at well-known spots
+      - Minimal time added to journey
+      
+      📍 Level 5-6 (Balanced):
+      - Suggest 2-3 stops
+      - Mix of popular attractions and local favorites
+      - Small detours (up to 15km) acceptable for highly-rated places
+      - Balance between efficiency and experience
+      
+      📍 Level 7-8 (Adventure):
+      - Suggest 3-4 stops
+      - Include "hidden gems" and local secrets
+      - Scenic viewpoints, quirky shops, local eateries
+      - Detours up to 25km acceptable for unique experiences
+      - Prioritize authenticity over convenience
+      
+      📍 Level 9-10 (Maximum Serendipity):
+      - Suggest 4-5 stops
+      - Prioritize unique, off-the-beaten-path experiences
+      - Scenic routes over highways when possible
+      - Detours up to 30km for exceptional places
+      - Include unexpected discoveries and local culture
+      - Generate 5+ "extra_suggestions" for spontaneous exploration
+      
       For each stop, provide:
       - name: Name of the place ${isChineseMode ? '(中文名称)' : ''}
-      - type: MUST be EXACTLY one of: "food", "sight", "shop", or "activity" (lowercase only)
+      - type: EXACTLY one of: "food", "sight", "shop", or "activity" (lowercase only)
       - description: Short, witty description (1 sentence) ${isChineseMode ? '(中文描述)' : ''}
-      - reason: Why this fits the vibe ${isChineseMode ? '(中文说明)' : ''}
+      - reason: Why this fits serendipity level ${serendipityLevel} ${isChineseMode ? '(中文说明)' : ''}
       - rating: A float between 4.0 and 5.0 (e.g. 4.8)
       - location: A specific address or city name to geocode
       - image_keyword: A specific, visual keyword phrase for image search (keep in English for better image results)
 
-      Also provide 3-5 "extra_suggestions" that are interesting places NEAR the route but not necessarily stops. These should be "Hidden Gems" that the user might see on the map and decide to visit.
+      Also provide 3-5 "extra_suggestions" (or more for level 9-10) that are interesting places NEAR the route.
       
-      IMPORTANT: Ensure the "type" field is EXACTLY "food", "sight", "shop", or "activity" (lowercase). For restaurants/cafes, use "food". For viewpoints/museums/temples, use "sight".
+      IMPORTANT: Ensure the "type" field is EXACTLY "food", "sight", "shop", or "activity" (lowercase).
+
+      Finally, generate a "story_itinerary" in Markdown format.
+      - This should be a warm, engaging, travel-blogger style narrative of the trip.
+      - Organize it day by day (Day 1, Day 2, etc.).
+      - Mention the stops you selected and why they are great.
+      - Add some "pro tips" or "vibe checks" for the journey.
+      - Make it feel personal and exciting.
+      - Use Markdown formatting (headers, bold, lists) to make it readable.
       
       Return ONLY valid JSON in this format:
       {
@@ -73,7 +114,8 @@ export async function POST(request: Request) {
         ],
         "extra_suggestions": [
           { "name": "...", "type": "sight", "description": "...", "reason": "...", "rating": 4.5, "location": "...", "image_keyword": "..." }
-        ]
+        ],
+        "story_itinerary": "# Your Trip to ...\n\n## Day 1\n..."
       }
     `;
 
@@ -85,14 +127,14 @@ export async function POST(request: Request) {
 
         // Clean up JSON if markdown code blocks are present
         let jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        
+
         // Remove any trailing commas before closing braces/brackets
         jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-        
+
         // Remove comments if any
         jsonStr = jsonStr.replace(/\/\/.*/g, '');
         jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\//g, '');
-        
+
         let tripData;
         try {
             tripData = JSON.parse(jsonStr);
@@ -103,7 +145,7 @@ export async function POST(request: Request) {
             console.error('Original text:', text);
             throw new Error('Failed to parse AI response. Please try again.');
         }
-        
+
         // Validate response structure
         if (!tripData.waypoints || !Array.isArray(tripData.waypoints)) {
             console.error('Invalid response structure:', tripData);
@@ -139,11 +181,20 @@ export async function POST(request: Request) {
             end: { name: end, coordinates: endCoords },
             waypoints: waypointsWithCoords.filter((wp: any) => wp.coordinates),
             extraSuggestions: extraSuggestionsWithCoords.filter((wp: any) => wp.coordinates),
-            route: routeGeoJSON
+            route: routeGeoJSON,
+            itinerary: tripData.story_itinerary
         });
 
-    } catch (error) {
-        console.error("Trip planning error:", error);
-        return NextResponse.json({ error: 'Failed to plan trip' }, { status: 500 });
+    } catch (error: any) {
+        console.error("❌ Trip planning error details:", error);
+        console.error("Stack:", error.stack);
+        // Check if API key is missing
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("❌ GEMINI_API_KEY is missing in environment variables!");
+        }
+        return NextResponse.json({
+            error: `Failed to plan trip: ${error.message}`,
+            details: error.stack
+        }, { status: 500 });
     }
 }
