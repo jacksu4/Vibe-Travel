@@ -183,3 +183,4 @@ map.current.fitBounds(bounds, {
 4. 添加用户偏好设置持久化
 5. 支持更多语言（日文、韩文等）
 
+
