@@ -17,6 +17,10 @@ jest.mock('mapbox-gl', () => ({
         addLayer: jest.fn(),
         getSource: jest.fn(() => ({ setData: jest.fn() })),
         fitBounds: jest.fn(),
+        setStyle: jest.fn(),
+        setProjection: jest.fn(),
+        once: jest.fn(),
+        flyTo: jest.fn(),
     })),
     Marker: jest.fn(() => ({
         setLngLat: jest.fn().mockReturnThis(),
@@ -29,18 +33,31 @@ jest.mock('mapbox-gl', () => ({
     accessToken: '',
 }));
 
+import { LanguageProvider } from '../contexts/LanguageContext';
+
+// ... (mocks remain same)
+
 describe('Home Page', () => {
     beforeEach(() => {
         process.env.NEXT_PUBLIC_MAPBOX_TOKEN = 'mock-token';
     });
 
     it('renders the map background', () => {
-        render(<Home />)
-        expect(screen.getByTestId('mapbox-map')).toBeInTheDocument()
+        render(
+            <LanguageProvider>
+                <Home />
+            </LanguageProvider>
+        )
+        const mapboxgl = require('mapbox-gl');
+        expect(mapboxgl.Map).toHaveBeenCalled();
     })
 
     it('renders the floating island with inputs', () => {
-        render(<Home />)
+        render(
+            <LanguageProvider>
+                <Home />
+            </LanguageProvider>
+        )
         expect(screen.getByPlaceholderText('Where are you?')).toBeInTheDocument()
         expect(screen.getByPlaceholderText('Where to?')).toBeInTheDocument()
         expect(screen.getByText('Launch')).toBeInTheDocument()

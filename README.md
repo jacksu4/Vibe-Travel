@@ -1,232 +1,129 @@
-# Serendipity - The Global Detour Engine
+# Vibe Travel 🌍✈️
 
-> "The goal is NOT efficiency. The goal is to maximize 'Vibe' and discover hidden gems."
+An AI-powered travel planning application that optimizes for "Serendipity" vs. "Efficiency".
 
-Serendipity is a high-end travel web application designed to help users discover hidden gems between Point A and Point B. It prioritizes "Vibe" over speed, offering a "Zen Futurism" interface with bilingual support (English/中文).
+## 🚀 Features
 
-## Tech Stack
+- **AI Trip Planning**: Uses Google Gemini to generate personalized itineraries based on your "Vibe" (Serendipity vs. Efficiency).
+- **Interactive Map**: 3D Globe view with dynamic markers for waypoints, city highlights, and route stops.
+- **Smart Suggestions**:
+  - **City Highlights**: 6-8 must-visit spots in start/end cities (focused on dense city centers).
+  - **Route Stops**: Interesting stops *along* the driving route.
+  - **Extra Gems**: Hidden gems near your path.
+- **Dynamic Visualization**:
+  - Markers change color based on map theme (Dark/Light/Satellite) for optimal visibility.
+  - Interactive popups with details and ratings.
+- **Performance**:
+  - **Client-side Caching**: Instantly loads previously planned trips.
+  - **Optimized API**: Parallelized geocoding and robust error handling.
+- **Bilingual Support**: English and Chinese (简体中文) interface.
 
-- **Framework:** Next.js 16 (App Router with Turbopack)
-- **Styling:** Tailwind CSS v4
-- **Animation:** Framer Motion
-- **Map:** Mapbox GL JS (Globe projection)
-- **AI:** Google Gemini API for intelligent route planning
-- **Icons:** Lucide React
-- **Fonts:** Geist Sans / Geist Mono
-- **i18n:** React Context (no external library)
+## 🛠️ Tech Stack
 
-## Features
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS, Framer Motion
+- **Map**: Mapbox GL JS, React Map GL
+- **AI**: Google Gemini API (`gemini-2.5-flash`)
+- **Backend**: Next.js API Routes
+- **Testing**: Jest, React Testing Library
 
-### Core Features
-- **🌍 Rotating Globe:** Interactive 3D globe with auto-rotation on load
-- **🎨 Premium Hero Section:** Gradient animated title with backdrop effects
-- **🗺️ Intelligent Route Planning:** AI-powered waypoint suggestions via Gemini
-- **🎚️ Vibe Slider:** Trade off efficiency for serendipity (0-100 scale)
-- **✨ Extra Suggestions:** Hidden gems displayed as small markers near the route
-- **📍 Nearby Places:** Click any waypoint to discover nearby attractions, restaurants, and activities
-- **🌐 Bilingual Support:** Instant switching between English and Chinese (中文)
-- **🎭 Multiple Map Themes:** Dark mode, Light mode, Satellite view
+## 📦 Installation
 
-### UI/UX Highlights
-- **The Void Design System:** Immersive dark mode with glassmorphism
-- **Floating Island:** Sleek control panel for route planning at the bottom
-- **Language Toggle:** Easy-to-access switcher in top-left corner
-- **Map Controls:** Theme switcher and view reset in top-right corner
-- **Gem Cards:** Beautiful waypoint popups with images and ratings
-- **Nearby Recommendations:** 5-8 curated places with ratings, reviews, and distances
-- **Smart Navigation:** Prev/Next buttons for main waypoints (hidden for nearby places)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- Mapbox Access Token
-- Google Gemini API Key
-
-### Installation
-
-1. Clone the repository:
+1. **Clone the repo**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/jacksu4/Vibe-Travel.git
    cd Vibe-Travel
    ```
 
-2. Install dependencies:
+2. **Install dependencies**:
    ```bash
    npm install
    ```
 
-3. Create a `.env.local` file and add your API keys:
+3. **Set Environment Variables**:
+   Create a `.env.local` file in the root directory:
    ```env
-   NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
    GEMINI_API_KEY=your_gemini_api_key_here
+   NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
    ```
 
-4. Run the development server:
+4. **Run Development Server**:
    ```bash
    npm run dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+5. **Open**: [http://localhost:3000](http://localhost:3000)
 
-## Usage Guide
+## 🧪 Testing
 
-### Planning a Trip
-
-1. **Enter Locations:**
-   - Start: Where you are (e.g., "Tokyo")
-   - End: Where you want to go (e.g., "Osaka")
-
-2. **Set Duration:**
-   - Use +/- buttons to select trip duration (1-14 days)
-
-3. **Adjust Vibe:**
-   - Left (0-30): Efficient route with minimal stops
-   - Middle (30-70): Balanced mix of speed and sights
-   - Right (70-100): Scenic route with hidden gems (+2h travel time)
-
-4. **Launch:**
-   - Click "Launch" / "启动" to generate your route
-   - Watch the AI planning process with animated loading text
-
-### Exploring Waypoints
-
-1. **View Route:**
-   - Globe stops rotating and zooms to your route
-   - Cyan line shows the path
-   - Large circular markers show main waypoints
-
-2. **Click Waypoint:**
-   - See beautiful popup with image, description, and rating
-   - "Vibe Check" section explains why this place fits your journey
-   - Navigate with "Prev Stop" / "Next Stop" buttons
-
-3. **Discover Nearby:**
-   - When viewing a waypoint, nearby places appear as yellow markers (🍴 📸 🛍️)
-   - 5-8 curated recommendations with ratings and distances
-   - Click any nearby place to view details
-   - Nearby place popups don't show Prev/Next navigation
-
-### Switching Languages
-
-- Click the 🌍 globe icon in the top-left corner
-- All UI text updates instantly
-- Supported: English (EN) ↔ Chinese (中文)
-
-### Testing
-
-Run the test suite:
+The project includes comprehensive unit and integration tests with 70%+ code coverage.
 
 ```bash
+# Run all tests
 npm test
+
+# Run tests with coverage
+npm test -- --coverage
 ```
 
-## API Endpoints
-
-### `POST /api/plan-trip`
-Plans a complete trip with waypoints and extra suggestions.
-
-**Request:**
-```json
-{
-  "start": "San Francisco",
-  "end": "Los Angeles",
-  "vibe": 80,
-  "days": 2
-}
-```
-
-**Response:**
-```json
-{
-  "start": { "name": "San Francisco", "coordinates": [-122.4194, 37.7749] },
-  "end": { "name": "Los Angeles", "coordinates": [-118.2437, 34.0522] },
-  "waypoints": [...],
-  "extraSuggestions": [...],
-  "route": { "type": "LineString", "coordinates": [...] }
-}
-```
-
-### `POST /api/nearby`
-Fetches nearby places for a specific location.
-
-**Request:**
-```json
-{
-  "location": "Tokyo Tower",
-  "coordinates": [139.7454, 35.6586]
-}
-```
-
-**Response:**
-```json
-{
-  "nearby_places": [
-    {
-      "name": "Sushi Saito",
-      "type": "food",
-      "description": "Michelin 3-star sushi experience",
-      "rating": 4.9,
-      "review_count": 2500,
-      "distance": 0.3,
-      "coordinates": [139.7467, 35.6601],
-      "image_keyword": "Sushi Saito Tokyo interior"
-    }
-  ]
-}
-```
-
-## Project Structure
+## 🏗️ Project Structure
 
 ```
-Vibe-Travel/
+vibe-travel/
 ├── app/
-│   ├── api/
-│   │   ├── plan-trip/route.ts    # Main trip planning API
-│   │   └── nearby/route.ts       # Nearby places API
-│   ├── layout.tsx                # Root layout with LanguageProvider
-│   ├── page.tsx                  # Homepage with hero and trip planning
-│   └── globals.css               # Global styles
+│   ├── api/              # API routes
+│   │   ├── plan-trip/    # Trip planning endpoint
+│   │   ├── nearby/       # Nearby places search
+│   │   └── place-photos/ # Place photos retrieval
+│   ├── layout.tsx        # Root layout with providers
+│   └── page.tsx          # Main page component
 ├── components/
-│   ├── FloatingIsland.tsx        # Trip input control panel
-│   ├── MapBackground.tsx         # Interactive Mapbox globe
-│   ├── WaypointPopup.tsx         # Waypoint detail popup with nearby places
-│   ├── PlaceAutocomplete.tsx     # Location search with Mapbox API
-│   ├── LanguageToggle.tsx        # Language switcher button
-│   └── GemCard.tsx               # Gem card component (future use)
+│   ├── FloatingIsland.tsx   # Trip input form
+│   ├── MapBackground.tsx    # Interactive map
+│   ├── TripJournal.tsx      # Itinerary display
+│   └── LanguageToggle.tsx   # Language switcher
 ├── contexts/
-│   └── LanguageContext.tsx       # i18n state management
+│   └── LanguageContext.tsx  # i18n context
 ├── lib/
-│   ├── i18n.ts                   # Translation dictionaries
-│   └── mapbox.ts                 # Mapbox helper functions
-└── package.json
+│   ├── mapbox.ts        # Mapbox geocoding & routing
+│   ├── cache.ts         # In-memory caching
+│   └── firebase.ts      # Firebase config (optional)
+├── __tests__/           # Test files
+└── public/              # Static assets
 ```
 
-## Environment Variables
+## 🔧 Key Technical Details
 
-Create a `.env.local` file with:
+### Gemini Model Configuration
+- **Model**: `gemini-2.5-flash` (optimized for v1beta API)
+- **JSON Parsing**: Robust extraction that handles Markdown code blocks and malformed responses
 
-```env
-# Required
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_mapbox_token
-GEMINI_API_KEY=your_gemini_api_key
+### Caching Strategy
+- **Client-side**: `localStorage` for instant repeated searches
+- **Server-side**: In-memory cache with deterministic keys
 
-# Optional (if using custom Mapbox styles)
-NEXT_PUBLIC_MAPBOX_STYLE_DARK=mapbox://styles/...
-NEXT_PUBLIC_MAPBOX_STYLE_LIGHT=mapbox://styles/...
-```
+### Map Markers
+- Dynamic styling based on theme (black on light, white on dark)
+- Category-based icons (🍴 food, 📸 sight, 🛍️ shop, 🎯 activity)
+- Interactive popups with ratings and descriptions
 
-## Contributing
+## 📝 Recent Fixes
 
-Contributions are welcome! Please follow these guidelines:
+### Critical Bug Fixes (Nov 2025)
+1. **Gemini API 404 Error**: Updated model from deprecated versions to `gemini-2.5-flash` for v1beta API compatibility
+2. **JSON Parsing Issues**: Fixed regex that was stripping URLs containing `//`, added Markdown code block handling
+3. **Test Mocking**: Comprehensive mocks for Firebase, Framer Motion, Mapbox, and Next.js navigation
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+## 🤝 Contributing
 
-## License
+Contributions are welcome! Please ensure:
+- All tests pass (`npm test`)
+- Code coverage remains above 70%
+- TypeScript types are properly defined
 
-MIT
+## 📄 License
+
+MIT License
+
+## 👨‍💻 Author
+
+Created by [jacksu4](https://github.com/jacksu4)

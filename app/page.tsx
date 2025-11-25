@@ -40,6 +40,7 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const [loadingText, setLoadingText] = useState('');
   const [waypoints, setWaypoints] = useState<any[]>([]); // New state
+  const [extraWaypoints, setExtraWaypoints] = useState<any[]>([]); // New state
   const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null); // New state
   const [selectedWaypoint, setSelectedWaypoint] = useState<any>(null);
   const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
@@ -75,6 +76,7 @@ export default function Home() {
   }, [isSearching, LOADING_TEXTS]);
 
 
+  const [isPlanningMinimized, setIsPlanningMinimized] = useState(false);
 
   // Auth & History Effect
   useEffect(() => {
@@ -126,7 +128,7 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async (start: string, end: string, vibe: number, days: number) => {
+  const handleSearch = async (waypoints: string[], vibe: number, days: number, customPreferences: string) => {
     setIsSearching(true);
     // Reset previous state
     setWaypoints([]);
@@ -134,16 +136,39 @@ export default function Home() {
     setSelectedWaypoint(null);
     setNearbyPlaces([]);
     setItineraryContent('');
-    setCurrentTripTitle(`${start} to ${end}`);
+    setCurrentTripTitle(`${waypoints[0]} to ${waypoints[waypoints.length - 1]}`);
 
     const startTime = Date.now();
-    console.log(`🚀 Planning trip: ${start} → ${end}`);
+    console.log(`🚀 Planning multi-waypoint trip: ${waypoints.join(' → ')}`);
+
+    // Check Local Storage Cache
+    const cacheKey = `trip_plan_${JSON.stringify({ waypoints, vibe, days, customPreferences, language })}`;
+    const cachedData = localStorage.getItem(cacheKey);
+
+    if (cachedData) {
+      try {
+        const data = JSON.parse(cachedData);
+        console.log('⚡️ Using client-side cached trip plan');
+        setWaypoints(data.waypoints);
+        setRouteGeoJSON(data.route);
+        setExtraWaypoints(data.extraSuggestions || []);
+        if (data.itinerary) {
+          setItineraryContent(data.itinerary);
+          setIsJournalOpen(true);
+        }
+        setIsSearching(false);
+        return;
+      } catch (e) {
+        console.error('Error parsing cached data', e);
+        localStorage.removeItem(cacheKey);
+      }
+    }
 
     try {
       const response = await fetch('/api/plan-trip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start, end, vibe, days, language })
+        body: JSON.stringify({ waypoints, vibe, days, customPreferences, language })
       });
 
       if (!response.ok) {
@@ -155,10 +180,17 @@ export default function Home() {
       const data = await response.json();
       const duration = Date.now() - startTime;
       console.log(`✅ Trip planned in ${duration}ms:`, data.waypoints?.length || 0, 'waypoints');
-      console.log('📦 Full response data:', data);
+
+      // Save to Local Storage
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      } catch (e) {
+        console.warn('Failed to save to localStorage (quota exceeded?)', e);
+      }
 
       setWaypoints(data.waypoints);
       setRouteGeoJSON(data.route);
+      setExtraWaypoints(data.extraSuggestions || []);
 
       if (data.itinerary) {
         setItineraryContent(data.itinerary);
@@ -167,12 +199,11 @@ export default function Home() {
 
       // Save to history if logged in
       if (user) {
-        handleSaveTrip(data, start, end, vibe, days, data.itinerary);
+        handleSaveTrip(data, waypoints[0], waypoints[waypoints.length - 1], vibe, days, data.itinerary);
       }
 
     } catch (error: any) {
       console.error('❌ Trip planning error:', error);
-      console.error('Error message:', error.message);
       alert(error.message || t('errors.planningFailed') || 'Failed to plan trip. Please check your API keys and try again.');
     } finally {
       setIsSearching(false);
@@ -278,6 +309,7 @@ export default function Home() {
         endLocation={waypoints[waypoints.length - 1]} // Assuming last waypoint is end
         onWaypointClick={(wp) => handleWaypointClick(wp, false)}
         selectedWaypoint={selectedWaypoint}
+        extraWaypoints={extraWaypoints}
         nearbyPlaces={nearbyPlaces}
         onNearbyClick={(place) => handleWaypointClick(place, true)}
       />
@@ -318,11 +350,13 @@ export default function Home() {
           onClose={() => setIsAuthOpen(false)}
         />
 
-        <HistoryButton
-          key="history-btn"
-          user={user}
-          onRestoreTrip={handleRestoreTrip}
-        />
+        {user && (
+          <HistoryButton
+            key="history-btn"
+            user={user}
+            onRestoreTrip={handleRestoreTrip}
+          />
+        )}
 
         <TripJournal
           key="trip-journal"
@@ -342,8 +376,14 @@ export default function Home() {
           key="floating-island"
           onSearch={handleSearch}
           isSearching={isSearching}
-          isCollapsed={!!selectedWaypoint} // Collapsed if a waypoint is selected
-          onToggleCollapse={() => setSelectedWaypoint(null)} // Uncollapse means closing waypoint popup
+          isCollapsed={!!selectedWaypoint || isPlanningMinimized}
+          onToggleCollapse={() => {
+            if (selectedWaypoint) {
+              setSelectedWaypoint(null);
+            } else {
+              setIsPlanningMinimized(!isPlanningMinimized);
+            }
+          }}
         />
 
         {selectedWaypoint && (

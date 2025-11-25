@@ -1,20 +1,38 @@
+import { geocodingCache } from './cache';
+
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-export async function getCoordinates(place: string, proximity?: [number, number]): Promise<[number, number] | null> {
+export async function getCoordinates(place: string, proximity?: [number, number], language?: string): Promise<[number, number] | null> {
     if (!MAPBOX_TOKEN) return null;
+
+    // Create a cache key
+    const cacheKey = `geo:${place}:${proximity ? proximity.join(',') : ''}:${language || ''}`;
+
+    // Check cache
+    if (geocodingCache.has(cacheKey)) {
+        console.log(`⚡️ Cache hit for geocoding: ${place}`);
+        return geocodingCache.get(cacheKey) || null;
+    }
 
     try {
         let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(place)}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
-        
+
         // Add proximity bias to search near a specific location
         if (proximity) {
             url += `&proximity=${proximity[0]},${proximity[1]}`;
         }
-        
+
+        if (language) {
+            url += `&language=${language}`;
+        }
+
         const response = await fetch(url);
         const data = await response.json();
         if (data.features && data.features.length > 0) {
-            return data.features[0].center; // [lng, lat]
+            const coords = data.features[0].center as [number, number];
+            // Store in cache
+            geocodingCache.set(cacheKey, coords);
+            return coords;
         }
     } catch (error) {
         console.error("Geocoding error:", error);
@@ -23,14 +41,19 @@ export async function getCoordinates(place: string, proximity?: [number, number]
 }
 
 // Get city/country context from coordinates
-async function getLocationContext(coordinates: [number, number]): Promise<string> {
+async function getLocationContext(coordinates: [number, number], language?: string): Promise<string> {
     if (!MAPBOX_TOKEN) return '';
-    
+
     try {
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coordinates[0]},${coordinates[1]}.json?access_token=${MAPBOX_TOKEN}&types=place,region,country`;
+        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coordinates[0]},${coordinates[1]}.json?access_token=${MAPBOX_TOKEN}&types=place,region,country`;
+
+        if (language) {
+            url += `&language=${language}`;
+        }
+
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (data.features && data.features.length > 0) {
             // Extract place names from context
             const contexts: string[] = [];
@@ -49,39 +72,44 @@ async function getLocationContext(coordinates: [number, number]): Promise<string
 
 // Search for places near a specific location with more details
 export async function searchNearbyPlace(
-    placeName: string, 
+    placeName: string,
     nearCoordinates: [number, number],
-    searchRadius: number = 5 // km
+    searchRadius: number = 5, // km
+    language?: string
 ): Promise<{ coordinates: [number, number], fullName: string, distance: number } | null> {
     if (!MAPBOX_TOKEN) return null;
 
     try {
         // Get location context (city, country) to improve search accuracy
-        const locationContext = await getLocationContext(nearCoordinates);
+        const locationContext = await getLocationContext(nearCoordinates, language);
         const searchQuery = locationContext ? `${placeName}, ${locationContext}` : placeName;
-        
+
         console.log(`      Search query: "${searchQuery}"`);
-        
+
         // Use types to focus on POIs (points of interest)
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${MAPBOX_TOKEN}&proximity=${nearCoordinates[0]},${nearCoordinates[1]}&limit=10&types=poi,address`;
-        
+        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${MAPBOX_TOKEN}&proximity=${nearCoordinates[0]},${nearCoordinates[1]}&limit=10&types=poi,address`;
+
+        if (language) {
+            url += `&language=${language}`;
+        }
+
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (data.features && data.features.length > 0) {
             // Helper to calculate distance
             const calcDist = (coord: [number, number]) => {
                 const R = 6371;
                 const dLat = (coord[1] - nearCoordinates[1]) * Math.PI / 180;
                 const dLon = (coord[0] - nearCoordinates[0]) * Math.PI / 180;
-                const a = 
+                const a =
                     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                     Math.cos(nearCoordinates[1] * Math.PI / 180) * Math.cos(coord[1] * Math.PI / 180) *
                     Math.sin(dLon / 2) * Math.sin(dLon / 2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                 return R * c;
             };
-            
+
             // Find the closest result within radius
             for (const feature of data.features) {
                 const distance = calcDist(feature.center);
@@ -93,7 +121,7 @@ export async function searchNearbyPlace(
                     };
                 }
             }
-            
+
             // If no results within radius, return null (don't use far-away results)
             console.log(`      No results found within ${searchRadius}km radius`);
             return null;
@@ -111,7 +139,7 @@ export async function getRoute(points: [number, number][]): Promise<any> {
 
     try {
         const response = await fetch(
-            `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinatesString}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+            `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinatesString}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`
         );
         const data = await response.json();
         if (data.routes && data.routes.length > 0) {

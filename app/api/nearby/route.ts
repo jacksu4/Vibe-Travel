@@ -9,7 +9,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
+    const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
@@ -26,11 +26,11 @@ export async function POST(request: Request) {
         }
 
         const isChineseMode = language === 'zh';
-        const languageInstruction = isChineseMode 
-            ? `请用中文回答。所有名称、描述、原因都必须使用简体中文。`
+        const languageInstruction = isChineseMode
+            ? `请务必全程使用简体中文回答。所有地点名称、描述都必须使用中文。如果地点有官方中文译名，请使用中文译名。`
             : `Please respond in English. All names, descriptions, and reasons should be in English.`;
 
-        const model = genAI.getGenerativeModel({ 
+        const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash' // 使用 Gemini 2.5 Flash
         });
 
@@ -84,14 +84,14 @@ export async function POST(request: Request) {
         console.log('Raw Gemini nearby response:', text);
 
         let jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        
+
         // Remove any trailing commas before closing braces/brackets
         jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-        
+
         // Remove comments if any
         jsonStr = jsonStr.replace(/\/\/.*/g, '');
         jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\//g, '');
-        
+
         let nearbyData;
         try {
             nearbyData = JSON.parse(jsonStr);
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
             console.error('Original text:', text);
             throw new Error('Failed to parse AI response for nearby places.');
         }
-        
+
         // Validate response structure
         if (!nearbyData.nearby_places || !Array.isArray(nearbyData.nearby_places)) {
             console.error('Invalid nearby response structure:', nearbyData);
@@ -113,17 +113,17 @@ export async function POST(request: Request) {
         const placesWithCoords = await Promise.all(
             nearbyData.nearby_places.map(async (place: any, index: number) => {
                 console.log(`🔍 Searching for: "${place.name}" near [${coordinates[0]}, ${coordinates[1]}]`);
-                
+
                 // Use Mapbox to search for this place name near the main coordinates
-                const result = await searchNearbyPlace(place.name, coordinates, 5); // Search within 5km
-                
+                const result = await searchNearbyPlace(place.name, coordinates, 5, language); // Search within 5km
+
                 if (result) {
                     console.log(`  ✅ Found at: [${result.coordinates[0].toFixed(6)}, ${result.coordinates[1].toFixed(6)}] (${result.distance.toFixed(2)}km away)`);
                     console.log(`  📍 Full name: ${result.fullName}`);
-                    
+
                     // Update the distance field with actual distance
-                    return { 
-                        ...place, 
+                    return {
+                        ...place,
                         coordinates: result.coordinates,
                         mapbox_name: result.fullName,
                         distance: parseFloat(result.distance.toFixed(1))
@@ -151,26 +151,26 @@ export async function POST(request: Request) {
                 console.log(`Filtered out ${p.name}: no coordinates`);
                 return false;
             }
-            
+
             // Recalculate distance to verify
             if (coordinates) {
                 const [lon1, lat1] = coordinates;
                 const [lon2, lat2] = p.coordinates;
                 const distance = calculateDistance(lat1, lon1, lat2, lon2);
-                
+
                 // More lenient filter: allow places up to 5km away (since we're using offset fallback)
                 if (distance > 5) {
                     console.log(`Filtered out ${p.name}: ${distance.toFixed(2)}km away (>5km limit)`);
                     return false;
                 }
-                
+
                 // Update the distance field with actual calculated distance
                 p.distance = Math.round(distance * 10) / 10; // Round to 1 decimal
             }
-            
+
             return true;
         });
-        
+
         console.log(`\n✅ Kept ${validPlaces.length}/${placesWithCoords.length} nearby places after filtering`);
 
         return NextResponse.json({

@@ -1,5 +1,6 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import Home from '../app/page'
+import { LanguageProvider } from '../contexts/LanguageContext';
 
 // Mock dependencies
 jest.mock('react-map-gl', () => ({
@@ -17,6 +18,10 @@ jest.mock('mapbox-gl', () => ({
         addLayer: jest.fn(),
         getSource: jest.fn(() => ({ setData: jest.fn() })),
         fitBounds: jest.fn(),
+        setStyle: jest.fn(),
+        setProjection: jest.fn(),
+        once: jest.fn(),
+        flyTo: jest.fn(),
     })),
     Marker: jest.fn(() => ({
         setLngLat: jest.fn().mockReturnThis(),
@@ -49,18 +54,22 @@ describe('Trip Planning Integration', () => {
             })
         });
 
-        render(<Home />);
+        render(
+            <LanguageProvider>
+                <Home />
+            </LanguageProvider>
+        );
 
         const startInput = screen.getByPlaceholderText('Where are you?');
         const endInput = screen.getByPlaceholderText('Where to?');
-        // Days input has default value 1, but it's type number.
-        // We can find it by type or value.
-        const daysInput = screen.getByDisplayValue('1');
+        const plusButton = screen.getByText('+');
         const launchButton = screen.getByText('Launch');
 
         fireEvent.change(startInput, { target: { value: 'Paris' } });
         fireEvent.change(endInput, { target: { value: 'Nice' } });
-        fireEvent.change(daysInput, { target: { value: '3' } });
+        // Click + button twice to set days to 3 (default is 1)
+        fireEvent.click(plusButton);
+        fireEvent.click(plusButton);
         fireEvent.click(launchButton);
 
         // Check loading state
@@ -71,9 +80,6 @@ describe('Trip Planning Integration', () => {
             expect(screen.queryByText(/Scanning local blogs/i)).not.toBeInTheDocument();
         });
 
-        // Verify map received data (indirectly via props or side effects if we could inspect them, 
-        // but here we trust the integration. In a real e2e test we'd check the map).
-        // Since we mocked mapbox-gl, we can check if Marker was instantiated.
         const mapboxgl = require('mapbox-gl');
         expect(mapboxgl.Marker).toHaveBeenCalled();
     });

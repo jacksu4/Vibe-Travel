@@ -76,7 +76,7 @@ export default function MapBackground({
   // Rotation Logic
   const userInteracting = useRef(false);
   const rotationFrameRef = useRef<number | null>(null);
-  
+
   const spinGlobe = () => {
     const mapInstance = map.current;
     if (!mapInstance || userInteracting.current || routeGeoJSON) {
@@ -173,7 +173,7 @@ export default function MapBackground({
   useEffect(() => {
     if (map.current && selectedWaypoint && selectedWaypoint.coordinates) {
       console.log(`🎯 Zooming to waypoint: ${selectedWaypoint.name} at [${selectedWaypoint.coordinates[0]}, ${selectedWaypoint.coordinates[1]}]`);
-      
+
       // Fly to waypoint immediately with higher zoom and offset to prevent popup covering
       map.current.flyTo({
         center: selectedWaypoint.coordinates,
@@ -258,12 +258,39 @@ export default function MapBackground({
       });
     }
 
-    // Extra Waypoints
+    // Extra Waypoints (Start/End City Highlights & Suggestions)
     if (extraWaypoints) {
       extraWaypoints.forEach(wp => {
         const el = document.createElement('div');
-        el.className = 'w-3 h-3 bg-white/50 rounded-full border border-black/20 cursor-pointer hover:scale-150 hover:bg-white transition-all';
-        el.title = wp.name;
+        el.className = 'group z-10 relative cursor-pointer';
+
+        // Icon based on type
+        const getIcon = (type: string) => {
+          switch (type?.toLowerCase()) {
+            case 'food': return '🍴';
+            case 'sight': return '📸';
+            case 'shop': return '🛍️';
+            case 'activity': return '🎯';
+            default: return '📍';
+          }
+        };
+
+        // Dynamic styling based on map mode
+        const isLightMode = mapStyle.includes('light');
+        const markerBg = isLightMode ? 'bg-black/80' : 'bg-white/20';
+        const markerBorder = isLightMode ? 'border-white/60' : 'border-white/60';
+        const iconColor = isLightMode ? 'text-white' : 'text-white';
+        const hoverBg = isLightMode ? 'hover:bg-black hover:text-white' : 'hover:bg-white hover:text-black';
+
+        el.innerHTML = `
+          <div class="w-8 h-8 ${markerBg} backdrop-blur-md rounded-full border ${markerBorder} flex items-center justify-center hover:scale-125 ${hoverBg} transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+             <div class="w-2.5 h-2.5 bg-white rounded-full group-hover:hidden shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
+             <div class="hidden group-hover:block text-xs ${iconColor}">${getIcon(wp.type)}</div>
+          </div>
+          <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/80 backdrop-blur-xl border border-white/20 rounded-lg text-xs text-white font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+            ${wp.name}
+          </div>
+        `;
 
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -292,18 +319,18 @@ export default function MapBackground({
         name: p.name,
         coordinates: p.coordinates
       })));
-      
+
       const markers: mapboxgl.Marker[] = [];
-      
+
       nearbyPlaces.forEach(place => {
         if (!place.coordinates || !Array.isArray(place.coordinates) || place.coordinates.length !== 2) {
           console.error('Invalid coordinates for place:', place.name, place.coordinates);
           return;
         }
-        
+
         const el = document.createElement('div');
         el.className = 'group cursor-pointer z-30 relative';
-        
+
         // Icon based on type
         const getIcon = (type: string) => {
           switch (type.toLowerCase()) {
@@ -337,36 +364,36 @@ export default function MapBackground({
           .addTo(map.current!);
         markers.push(marker);
       });
-      
+
       nearbyMarkersRef.current = markers;
 
       // Adjust view to show nearby places if needed (but don't zoom out too much)
       if (map.current && selectedWaypoint && nearbyPlaces.length > 0) {
         console.log(`📍 Adjusting view for ${nearbyPlaces.length} nearby places around ${selectedWaypoint.name}`);
-        
+
         // Small delay to let markers render and initial zoom to complete
         setTimeout(() => {
           if (!map.current) return;
-          
+
           const bounds = new mapboxgl.LngLatBounds();
           const allCoords: [number, number][] = [];
-          
+
           // Include selected waypoint
           bounds.extend(selectedWaypoint.coordinates);
           allCoords.push([selectedWaypoint.coordinates[0], selectedWaypoint.coordinates[1]]);
           console.log(`  - Main waypoint: [${selectedWaypoint.coordinates[0].toFixed(6)}, ${selectedWaypoint.coordinates[1].toFixed(6)}]`);
-          
+
           // Include all nearby places
           nearbyPlaces.forEach(place => {
             if (place.coordinates && Array.isArray(place.coordinates) && place.coordinates.length === 2) {
               const lng = parseFloat(place.coordinates[0]);
               const lat = parseFloat(place.coordinates[1]);
-              
+
               if (isNaN(lng) || isNaN(lat)) {
                 console.error(`  ❌ Invalid coordinates for ${place.name}:`, place.coordinates);
                 return;
               }
-              
+
               bounds.extend([lng, lat]);
               allCoords.push([lng, lat]);
               console.log(`  - ${place.name}: [${lng.toFixed(6)}, ${lat.toFixed(6)}]`);
@@ -374,8 +401,8 @@ export default function MapBackground({
           });
 
           // Check if all coordinates are too similar (within 0.001 degrees ~100m)
-          const hasVariation = allCoords.some(coord => 
-            Math.abs(coord[0] - allCoords[0][0]) > 0.001 || 
+          const hasVariation = allCoords.some(coord =>
+            Math.abs(coord[0] - allCoords[0][0]) > 0.001 ||
             Math.abs(coord[1] - allCoords[0][1]) > 0.001
           );
 
@@ -392,7 +419,7 @@ export default function MapBackground({
             duration: 1800,
             essential: true
           });
-          
+
           console.log(`✅ Map view adjusted to include ${allCoords.length} places with varying coordinates`);
         }, 1500); // Wait for initial waypoint zoom to complete first
       }
