@@ -220,7 +220,7 @@ export async function POST(request: Request) {
             console.log('Successfully parsed trip data');
         } catch (parseError) {
             console.error('JSON Parse Error:', parseError);
-            console.error('Failed JSON string:', jsonStr);
+            console.error('Failed JSON string (first 1000 chars):', jsonStr.substring(0, 1000));
 
             // Attempt to repair common JSON errors
             try {
@@ -229,6 +229,7 @@ export async function POST(request: Request) {
                 tripData = JSON.parse(cleanStr);
                 console.log('Successfully parsed trip data after cleanup');
             } catch (retryError) {
+                console.error('❌ Retry also failed. Full JSON:', jsonStr);
                 throw new Error('Failed to parse AI response. Please try again.');
             }
         }
